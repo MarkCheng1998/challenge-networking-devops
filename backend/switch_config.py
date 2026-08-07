@@ -15,7 +15,10 @@ import os
 import re
 from datetime import datetime
 from netmiko import ConnectHandler
-from netmiko.ssh_exception import NetmikoTimeoutException, NetmikoAuthenticationException
+try:
+    from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
+except ImportError:
+    from netmiko.ssh_exception import NetmikoTimeoutException, NetmikoAuthenticationException
 
 
 # 默认VLAN配置（符合挑战要求）
