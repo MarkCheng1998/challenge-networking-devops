@@ -1,0 +1,77 @@
+{
+  "project_name": "challenge-switch-lab",
+  "description": "GNS3 topology for Cisco Switch VLAN Automation Challenge",
+  "gns3_version": "2.2.x",
+  "topology": {
+    "nodes": [
+      {
+        "name": "SW1",
+        "type": "switch",
+        "platform": "vIOS-L2",
+        "alternative_platform": "c3725 (with NM-16ESW)",
+        "image": "viosl2-adventerprisek9-m.SPA.high_iron_20200929.qcow2",
+        "ram_mb": 768,
+        "interfaces": ["Ethernet0/0", "Ethernet0/1", "Ethernet0/2", "Ethernet0/3"],
+        "management": {
+          "interface": "Vlan1",
+          "ip": "192.168.122.10",
+          "mask": "255.255.255.0",
+          "gateway": "192.168.122.1"
+        },
+        "ssh": {
+          "username": "admin",
+          "password": "admin",
+          "enable_secret": "admin",
+          "port": 22
+        }
+      },
+      {
+        "name": "Cloud",
+        "type": "bridge",
+        "description": "Bridges GNS3 network to host PC loopback adapter",
+        "connected_to": "Host PC Microsoft KM-TEST Loopback Adapter (192.168.122.1/24)"
+      },
+      {
+        "name": "PC1",
+        "type": "vpcs",
+        "ip": "192.168.10.1",
+        "mask": "255.255.255.0",
+        "vlan": 10,
+        "connected_to_port": "Ethernet0/1"
+      },
+      {
+        "name": "PC2",
+        "type": "vpcs",
+        "ip": "192.168.10.2",
+        "mask": "255.255.255.0",
+        "vlan": 10,
+        "connected_to_port": "Ethernet0/2"
+      },
+      {
+        "name": "PC3",
+        "type": "vpcs",
+        "ip": "192.168.20.1",
+        "mask": "255.255.255.0",
+        "vlan": 20,
+        "connected_to_port": "Ethernet0/3"
+      }
+    ],
+    "links": [
+      {"from": "Cloud", "to": "SW1", "from_port": "bridge0", "to_port": "Ethernet0/0"},
+      {"from": "SW1", "to": "PC1", "from_port": "Ethernet0/1", "to_port": "eth0"},
+      {"from": "SW1", "to": "PC2", "from_port": "Ethernet0/2", "to_port": "eth0"},
+      {"from": "SW1", "to": "PC3", "from_port": "Ethernet0/3", "to_port": "eth0"}
+    ]
+  },
+  "vlans": [
+    {"id": 10, "name": "VLAN_DATOS", "purpose": "Data network"},
+    {"id": 20, "name": "VLAN_VOZ", "purpose": "Voice network"},
+    {"id": 50, "name": "VLAN_SEGURIDAD", "purpose": "Security network"}
+  ],
+  "port_assignments": [
+    {"port": "Ethernet0/0", "vlan": 1, "purpose": "Management (Cloud/Host)"},
+    {"port": "Ethernet0/1", "vlan": 10, "purpose": "Data - PC1"},
+    {"port": "Ethernet0/2", "vlan": 10, "purpose": "Data - PC2"},
+    {"port": "Ethernet0/3", "vlan": 20, "purpose": "Voice - PC3"}
+  ]
+}

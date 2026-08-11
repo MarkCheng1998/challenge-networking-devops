@@ -24,11 +24,16 @@ challenge-networking-devops/
 │   └── switch_config.py              # Cisco switch automation backend (VLAN/hostname/save/backup/validation)
 ├── backups/                          # Configuration backup directory
 ├── docs/
-│   └── vpn_ipsec_plan.md             # Part 2: IPSec VPN automation planning document
+│   ├── vpn_ipsec_plan.md             # Part 2: IPSec VPN automation planning document
+│   ├── gns3_deployment_guide.md      # GNS3 step-by-step deployment guide
+│   └── gns3_topology.json            # GNS3 topology reference (nodes, links, VLANs)
 └── scripts/
     ├── fortigate_vpn_config.py       # Fortigate VPN configuration script (REST API)
     ├── paloalto_vpn_config.py        # Palo Alto VPN configuration script (XML API)
-    └── test_connectivity.py          # IPSec tunnel connectivity test script
+    ├── test_connectivity.py          # IPSec tunnel connectivity test script
+    ├── gns3_switch_init.py           # GNS3 switch initial configuration generator/applier
+    ├── gns3_demo.py                  # GNS3 demo runner (full VLAN automation workflow)
+    └── vpcs_config.sh                # VPCS host configuration script for GNS3 lab
 ```
 
 ---
@@ -137,9 +142,71 @@ Detailed planning document: [`docs/vpn_ipsec_plan.md`](docs/vpn_ipsec_plan.md)
 
 ## Test Environment Notes
 
-- **Part 1**: Use Cisco Packet Tracer or GNS3 to set up a Cisco switch simulation environment
+- **Part 1**: Use GNS3 with a real Cisco IOS image to set up a fully functional switch simulation environment
+  - See the [GNS3 Deployment Guide](docs/gns3_deployment_guide.md) for step-by-step instructions
   - Alternatively, use "Simulation Mode" for demonstration without any network equipment
 - **Part 2**: VPN configuration is a planning document; no actual environment required. Example scripts can run on real devices
+
+---
+
+## GNS3 Deployment Guide
+
+This project includes a comprehensive GNS3 deployment guide for setting up a real Cisco switch lab environment.
+
+### Key Documents
+
+| Document | Description |
+|----------|-------------|
+| [`docs/gns3_deployment_guide.md`](docs/gns3_deployment_guide.md) | Complete step-by-step guide: GNS3 installation, IOS image import, topology setup, network bridging, switch configuration, and demo walkthrough |
+| [`docs/gns3_topology.json`](docs/gns3_topology.json) | Topology reference with all nodes, links, VLAN assignments, and port mappings |
+
+### GNS3 Demo Scripts
+
+| Script | Description |
+|--------|-------------|
+| `scripts/gns3_switch_init.py` | Generates and applies initial switch configuration (hostname, SSH, admin user, management IP) |
+| `scripts/gns3_demo.py` | Runs the full VLAN automation workflow against a GNS3 switch with detailed terminal output |
+| `scripts/vpcs_config.sh` | Configures Virtual PCs (VPCS) for VLAN connectivity testing |
+
+### Quick Start with GNS3
+
+```bash
+# 1. Follow the GNS3 deployment guide to set up the topology
+#    (Install GNS3, import IOS image, create topology, configure switch)
+
+# 2. Generate the switch initial configuration
+python scripts/gns3_switch_init.py --generate --output switch_base.cfg
+
+# 3. Apply the configuration to the GNS3 switch
+python scripts/gns3_switch_init.py --apply --host 127.0.0.1 --port 5001
+
+# 4. Verify connectivity to the switch
+python scripts/gns3_demo.py --check-only
+
+# 5. Run the full VLAN automation demo
+python scripts/gns3_demo.py --host 192.168.122.10 --username admin --password admin
+
+# 6. Or use the Flask web UI
+python app.py
+# Open http://localhost:5000
+# Enter: Switch IP = 192.168.122.10, admin/admin, uncheck Simulation Mode
+```
+
+### GNS3 Topology Overview
+
+```
+  Host PC (Flask + Netmiko)
+       │ SSH
+       │
+  [Cloud Node] ←→ [Loopback Adapter 192.168.122.1/24]
+       │
+  ┌────┴────────────┐
+  │  GNS3 Switch     │  192.168.122.10
+  │  (vIOS-L2/c3725) │  VLAN 1 (mgmt)
+  └──┬──────┬────┬──┘
+     │      │    │
+  PC1(V10) PC2(V10) PC3(V20)
+```
 
 ---
 
@@ -157,6 +224,7 @@ This project uses Git for version control. Commit history:
 | 6 | Add Fortigate/Palo Alto VPN example scripts and connectivity test |
 | 7 | Fix netmiko exception import for v4.7+ compatibility |
 | 8 | Rewrite all project documentation and code comments in English |
+| 9 | Add GNS3 deployment guide, topology reference, switch init script, demo runner, and VPCS config |
 
 ---
 
