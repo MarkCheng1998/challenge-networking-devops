@@ -1,9 +1,10 @@
 """
-Flask Web应用
-==============
-Cisco交换机VLAN配置自动化前端。
-提供Web界面让用户输入VLAN信息、交换机连接参数和主机名，
-执行自动化配置并展示验证结果和告警。
+Flask Web Application
+=====================
+Cisco Switch VLAN Configuration Automation Frontend.
+Provides a web interface for users to input VLAN information, switch connection
+parameters, and hostname, then execute automated configuration and display
+validation results and alerts.
 """
 
 import os
@@ -16,30 +17,30 @@ app.config["JSON_AS_ASCII"] = False
 
 @app.route("/")
 def index():
-    """渲染主页面。"""
+    """Render the main page."""
     return render_template("index.html", default_vlans=DEFAULT_VLANS, default_hostname=DEFAULT_HOSTNAME)
 
 
 @app.route("/api/configure", methods=["POST"])
 def configure():
     """
-    执行完整配置流程的API端点。
+    API endpoint to execute the full configuration workflow.
 
-    接收JSON参数:
-    - host: 交换机IP
-    - username: SSH用户名
-    - password: SSH密码
-    - port: SSH端口（可选，默认22）
-    - enable_password: enable密码（可选）
-    - hostname: 目标主机名
-    - vlans: VLAN列表 [{"id": "10", "name": "VLAN_DATOS"}, ...]
-    - simulate: 是否使用模拟模式
+    Accepts JSON parameters:
+    - host: Switch IP
+    - username: SSH username
+    - password: SSH password
+    - port: SSH port (optional, default 22)
+    - enable_password: Enable password (optional)
+    - hostname: Target hostname
+    - vlans: VLAN list [{"id": "10", "name": "VLAN_DATOS"}, ...]
+    - simulate: Whether to use simulation mode
 
-    返回JSON结果，包含每一步的执行状态和验证告警。
+    Returns JSON result containing each step's execution status and validation alerts.
     """
     data = request.json
 
-    # 提取参数
+    # Extract parameters
     host = data.get("host", "192.168.1.1")
     username = data.get("username", "admin")
     password = data.get("password", "admin")
@@ -49,7 +50,7 @@ def configure():
     vlans = data.get("vlans", DEFAULT_VLANS)
     simulate = data.get("simulate", False)
 
-    # 创建配置器实例
+    # Create configurator instance
     configurator = SwitchConfigurator(
         host=host,
         username=username,
@@ -59,7 +60,7 @@ def configure():
         simulate=simulate,
     )
 
-    # 执行完整配置流程
+    # Execute full configuration workflow
     result = configurator.apply_full_configuration(
         vlans=vlans,
         hostname=hostname,
@@ -72,9 +73,9 @@ def configure():
 @app.route("/api/validate", methods=["POST"])
 def validate():
     """
-    单独执行配置验证的API端点。
+    API endpoint to execute configuration validation only.
 
-    接收与 /api/configure 相同的参数，加上 expected_vlans 和 expected_hostname。
+    Accepts the same parameters as /api/configure, plus expected_vlans and expected_hostname.
     """
     data = request.json
 
@@ -100,7 +101,7 @@ def validate():
         configurator.connect()
         result = configurator.validate_configuration(expected_vlans, expected_hostname)
     except Exception as e:
-        result = {"is_valid": False, "alerts": [f"连接失败: {str(e)}"]}
+        result = {"is_valid": False, "alerts": [f"Connection failed: {str(e)}"]}
     finally:
         configurator.disconnect()
 

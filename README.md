@@ -1,168 +1,169 @@
 # Challenge Networking - DevOps
 
-> Mercado Libre - 候选人实验室 - 网络技术自动化挑战
+> Mercado Libre - Candidate Lab - Network Technology Automation Challenge
 
-本项目实现 Cisco 交换机 VLAN 配置自动化（通过 Web 前端），并规划 Fortigate 与 Palo Alto 之间 IPSec VPN 的自动化配置方案。
+This project implements Cisco switch VLAN configuration automation (via a web frontend) and plans the automation of IPSec VPN configuration between Fortigate and Palo Alto firewalls.
 
 ---
 
-## 项目结构
+## Project Structure
 
 ```
 challenge-networking-devops/
-├── README.md                         # 项目说明文档
-├── requirements.txt                  # Python 依赖
+├── README.md                         # Project documentation
+├── requirements.txt                  # Python dependencies
 ├── .gitignore
-├── app.py                            # Flask Web 应用主入口
+├── app.py                            # Flask web application entry point
 ├── templates/
-│   └── index.html                    # VLAN 配置前端界面
+│   └── index.html                    # VLAN configuration frontend interface
 ├── static/
-│   ├── style.css                     # 前端样式
-│   └── script.js                     # 前端交互逻辑
+│   ├── style.css                     # Frontend styling
+│   └── script.js                     # Frontend interaction logic
 ├── backend/
 │   ├── __init__.py
-│   └── switch_config.py              # Cisco 交换机自动化后端（VLAN/主机名/保存/备份/验证）
-├── backups/                          # 配置备份文件目录
+│   └── switch_config.py              # Cisco switch automation backend (VLAN/hostname/save/backup/validation)
+├── backups/                          # Configuration backup directory
 ├── docs/
-│   └── vpn_ipsec_plan.md             # Part 2: IPSec VPN 自动化规划文档
+│   └── vpn_ipsec_plan.md             # Part 2: IPSec VPN automation planning document
 └── scripts/
-    ├── fortigate_vpn_config.py       # Fortigate VPN 配置脚本（REST API）
-    ├── paloalto_vpn_config.py        # Palo Alto VPN 配置脚本（XML API）
-    └── test_connectivity.py          # IPSec 隧道连通性测试脚本
+    ├── fortigate_vpn_config.py       # Fortigate VPN configuration script (REST API)
+    ├── paloalto_vpn_config.py        # Palo Alto VPN configuration script (XML API)
+    └── test_connectivity.py          # IPSec tunnel connectivity test script
 ```
 
 ---
 
-## 第一部分：Cisco 交换机 VLAN 配置自动化
+## Part 1: Cisco Switch VLAN Configuration Automation
 
-### 功能概述
+### Feature Overview
 
-| 功能 | 描述 |
-|------|------|
-| VLAN 配置 | 通过 Web 界面输入 VLAN ID 和名称，自动在 Cisco 交换机上创建 VLAN |
-| 主机名修改 | 通过 Web 界面设置交换机主机名（默认: SWITCH_AUTOMATIZADO） |
-| 配置保存 | 自动执行 `write memory` 将配置保存到 NVRAM |
-| 配置备份 | 自动备份当前配置到本地文件（文件名含主机名和时间戳） |
-| 配置验证 | 配置完成后自动验证 VLAN 和主机名是否与期望一致，偏差时显示告警 |
-| 模拟模式 | 无需真实交换机即可演示完整流程（用于测试和展示） |
+| Feature | Description |
+|---------|-------------|
+| VLAN Configuration | Input VLAN IDs and names via web interface; automatically create VLANs on the Cisco switch |
+| Hostname Modification | Set the switch hostname via web interface (default: SWITCH_AUTOMATIZADO) |
+| Configuration Save | Automatically execute `write memory` to save configuration to NVRAM |
+| Configuration Backup | Automatically back up current configuration to a local file (filename includes hostname and timestamp) |
+| Configuration Validation | Automatically validate VLANs and hostname after configuration; display alerts on discrepancies |
+| Simulation Mode | Full workflow demonstration without a real switch (for testing and presentation) |
 
-### 预配置 VLAN
+### Pre-configured VLANs
 
-| VLAN ID | 名称 | 用途 |
-|---------|------|------|
-| 10 | VLAN_DATOS | 数据网络 |
-| 20 | VLAN_VOZ | 语音网络 |
-| 50 | VLAN_SEGURIDAD | 安全网络 |
+| VLAN ID | Name | Purpose |
+|---------|------|---------|
+| 10 | VLAN_DATOS | Data network |
+| 20 | VLAN_VOZ | Voice network |
+| 50 | VLAN_SEGURIDAD | Security network |
 
-### 安装和运行
+### Installation and Usage
 
-#### 1. 安装依赖
+#### 1. Install Dependencies
 
 ```bash
-# 克隆仓库
+# Clone the repository
 git clone https://github.com/<your-username>/challenge-networking-devops.git
 cd challenge-networking-devops
 
-# 创建虚拟环境（推荐）
+# Create a virtual environment (recommended)
 python -m venv venv
 source venv/bin/activate        # Linux/Mac
 # venv\Scripts\activate         # Windows
 
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-#### 2. 运行 Web 应用
+#### 2. Run the Web Application
 
 ```bash
 python app.py
 ```
 
-应用启动后，在浏览器中访问: **http://localhost:5000**
+After launch, open in your browser: **http://localhost:5000**
 
-#### 3. 使用前端界面
+#### 3. Using the Frontend Interface
 
-1. **交换机连接信息**: 输入交换机 IP、用户名、密码和 SSH 端口
-   - 如无真实设备，勾选「模拟模式」即可演示完整流程
-2. **主机名**: 输入目标主机名（默认: SWITCH_AUTOMATIZADO）
-3. **VLAN 配置**: 界面预填了 VLAN 10/20/50，可添加/删除/修改 VLAN
-4. **执行配置**: 点击「执行自动化配置」按钮
-   - 脚本将依次执行: 连接交换机 → 配置VLAN → 修改主机名 → 保存到NVRAM → 备份配置 → 验证配置
-5. **查看结果**: 右侧面板显示每一步的执行状态和验证告警
-6. **仅验证**: 如需单独验证当前配置，点击「仅验证配置」按钮
+1. **Switch Connection Info**: Enter the switch IP, username, password, and SSH port
+   - If no real device is available, check "Simulation Mode" to demonstrate the full workflow
+2. **Hostname**: Enter the target hostname (default: SWITCH_AUTOMATIZADO)
+3. **VLAN Configuration**: VLANs 10/20/50 are pre-populated; you can add/remove/modify VLANs
+4. **Execute Configuration**: Click the "Execute Automated Configuration" button
+   - The script will execute: Connect to switch -> Configure VLANs -> Modify hostname -> Save to NVRAM -> Backup configuration -> Validate configuration
+5. **View Results**: The right panel shows execution status and validation alerts for each step
+6. **Validate Only**: To validate the current configuration only, click "Validate Configuration Only"
 
-### 后端技术栈
+### Backend Tech Stack
 
-- **Flask**: Web 框架，提供 REST API 和页面渲染
-- **Netmiko**: 网络自动化库，通过 SSH 连接 Cisco 交换机
-- **正则表达式**: 解析 `show vlan brief` 和 `show running-config` 输出进行验证
+- **Flask**: Web framework, provides REST API and page rendering
+- **Netmiko**: Network automation library, connects to Cisco switches via SSH
+- **Regular Expressions**: Parse `show vlan brief` and `show running-config` output for validation
 
-### 验证逻辑说明
+### Validation Logic
 
-配置验证会检查以下内容：
-1. **主机名匹配**: 当前主机名是否与期望值一致
-2. **VLAN 存在性**: 每个期望 VLAN 是否存在
-3. **VLAN 名称匹配**: VLAN 名称是否与期望值一致
-4. **非标准配置检测**: 是否存在不在期望列表中的额外 VLAN
+The configuration validation checks the following:
+1. **Hostname Match**: Whether the current hostname matches the expected value
+2. **VLAN Existence**: Whether each expected VLAN exists
+3. **VLAN Name Match**: Whether the VLAN name matches the expected value
+4. **Non-standard Configuration Detection**: Whether there are extra VLANs not in the expected list
 
-告警级别：
-- ⚠ **严重告警**: VLAN 缺失、名称不匹配、主机名不匹配
-- ℹ **信息通知**: 发现非标准 VLAN（不影响期望配置）
-
----
-
-## 第二部分：IPSec VPN 自动化规划
-
-### 文档位置
-
-详细规划文档: [`docs/vpn_ipsec_plan.md`](docs/vpn_ipsec_plan.md)
-
-### 文档内容
-
-- **参数定义**: WAN IP、本地网络、隧道网络 (169.255.1.0/30)、Phase 1/2 参数
-- **工具/API 识别**: FortiOS REST API、Palo Alto XML API、SSH+CLI、Ansible、Terraform
-- **自动化步骤**: 两端设备的完整配置流程（地址对象→IKE→IPSec→隧道→策略→路由）
-- **跨厂商注意事项**: 术语映射、配置提交机制、API 格式、接口编号等差异
-- **验证和告警策略**: CLI/API 验证方法、检查清单、告警分级、回退策略
-
-### 示例脚本（可选交付物）
-
-| 脚本 | 说明 |
-|------|------|
-| `scripts/fortigate_vpn_config.py` | 通过 FortiOS REST API 配置 IPSec VPN |
-| `scripts/paloalto_vpn_config.py` | 通过 XML API 配置 Palo Alto IPSec VPN |
-| `scripts/test_connectivity.py` | 测试 IPSec 隧道连通性（Ping + 状态验证） |
+Alert levels:
+- **WARNING (Critical Alert)**: VLAN missing, name mismatch, hostname mismatch
+- **INFO (Informational)**: Non-standard VLAN found (does not affect expected configuration)
 
 ---
 
-## 测试环境说明
+## Part 2: IPSec VPN Automation Planning
 
-- **第一部分**: 可使用 Cisco Packet Tracer 或 GNS3 搭建 Cisco 交换机模拟环境
-  - 也可以直接使用「模拟模式」进行演示，无需任何网络设备
-- **第二部分**: VPN 配置为规划文档，无需实际环境。示例脚本可在真实设备上运行
+### Document Location
+
+Detailed planning document: [`docs/vpn_ipsec_plan.md`](docs/vpn_ipsec_plan.md)
+
+### Document Contents
+
+- **Parameter Definitions**: WAN IPs, local networks, tunnel network (169.255.1.0/30), Phase 1/2 parameters
+- **Tool/API Identification**: FortiOS REST API, Palo Alto XML API, SSH+CLI, Ansible, Terraform
+- **Automation Steps**: Complete configuration workflow for both devices (address objects -> IKE -> IPSec -> tunnel -> policy -> route)
+- **Cross-Vendor Considerations**: Terminology mapping, commit mechanisms, API formats, interface numbering differences
+- **Validation and Alert Strategy**: CLI/API validation methods, checklist, alert grading, rollback strategy
+
+### Example Scripts (Optional Deliverables)
+
+| Script | Description |
+|--------|-------------|
+| `scripts/fortigate_vpn_config.py` | Configure IPSec VPN via FortiOS REST API |
+| `scripts/paloalto_vpn_config.py` | Configure Palo Alto IPSec VPN via XML API |
+| `scripts/test_connectivity.py` | Test IPSec tunnel connectivity (Ping + status validation) |
 
 ---
 
-## Git 提交历史
+## Test Environment Notes
 
-本项目使用 Git 进行版本控制，提交历史如下：
-
-| 提交 | 说明 |
-|------|------|
-| 1 | 初始化项目结构和基础文件 (.gitignore, requirements.txt) |
-| 2 | 实现后端 Cisco 交换机配置模块 (switch_config.py) |
-| 3 | 开发 Flask Web 前端和 API (app.py, templates, static) |
-| 4 | 实现配置验证和告警机制 |
-| 5 | 编写 IPSec VPN 自动化规划文档 (vpn_ipsec_plan.md) |
-| 6 | 添加 Fortigate/Palo Alto VPN 示例脚本和连通性测试 |
-| 7 | 完善 README 文档 |
+- **Part 1**: Use Cisco Packet Tracer or GNS3 to set up a Cisco switch simulation environment
+  - Alternatively, use "Simulation Mode" for demonstration without any network equipment
+- **Part 2**: VPN configuration is a planning document; no actual environment required. Example scripts can run on real devices
 
 ---
 
-## 技术要点
+## Git Commit History
 
-1. **分层架构**: 前端（Flask/HTML/CSS/JS）→ API 层 → 后端自动化层（Netmiko）
-2. **模拟模式**: 内置模拟器，无设备时可完整演示流程
-3. **验证驱动**: 配置后自动验证，确保配置正确性
-4. **安全备份**: 每次配置变更自动备份，文件名含主机名和时间戳
-5. **跨厂商兼容**: VPN 规划覆盖 Fortigate 和 Palo Alto 的差异处理
+This project uses Git for version control. Commit history:
+
+| Commit | Description |
+|--------|-------------|
+| 1 | Initial project structure and base files (.gitignore, requirements.txt) |
+| 2 | Implement backend Cisco switch configuration module (switch_config.py) |
+| 3 | Develop Flask web frontend and API (app.py, templates, static) |
+| 4 | Implement configuration validation and alert mechanism |
+| 5 | Add IPSec VPN automation planning document (vpn_ipsec_plan.md) |
+| 6 | Add Fortigate/Palo Alto VPN example scripts and connectivity test |
+| 7 | Fix netmiko exception import for v4.7+ compatibility |
+| 8 | Rewrite all project documentation and code comments in English |
+
+---
+
+## Technical Highlights
+
+1. **Layered Architecture**: Frontend (Flask/HTML/CSS/JS) -> API Layer -> Backend Automation Layer (Netmiko)
+2. **Simulation Mode**: Built-in simulator for full workflow demonstration without equipment
+3. **Validation-Driven**: Automatic validation after configuration to ensure correctness
+4. **Secure Backup**: Automatic backup after each configuration change; filename includes hostname and timestamp
+5. **Cross-Vendor Compatibility**: VPN planning covers Fortigate and Palo Alto differences

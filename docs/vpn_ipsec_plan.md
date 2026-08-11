@@ -1,432 +1,435 @@
-# IPSec VPN 自动化配置规划文档
-## Fortigate 与 Palo Alto 之间的 IPSec VPN
+# IPSec VPN Automation Configuration Plan
+## IPSec VPN Between Fortigate and Palo Alto
 
-> 本文档详细说明 Fortigate 与 Palo Alto 防火墙之间 IPSec VPN 配置自动化的完整规划方案。
-
----
-
-## 1. 参数定义
-
-### 1.1 网络拓扑
-
-```
-┌─────────────────┐                        ┌─────────────────┐
-│   Site A        │                        │   Site B        │
-│  Fortigate      │     IPSec Tunnel       │  Palo Alto      │
-│  10.10.10.0/24  │◄──────────────────────►│  10.20.20.0/24  │
-│  WAN: 200.1.1.1 │   169.255.1.0/30       │  WAN: 200.2.2.2 │
-└─────────────────┘                        └─────────────────┘
-```
-
-### 1.2 WAN 接口地址
-
-| 设备 | WAN IP | 角色 |
-|------|--------|------|
-| Fortigate (Site A) | 200.1.1.1/30 | VPN 隧道一端 |
-| Palo Alto (Site B) | 200.2.2.2/30 | VPN 隧道另一端 |
-
-### 1.3 本地网络
-
-| 站点 | 本地网络 | 说明 |
-|------|----------|------|
-| Site A (Fortigate) | 10.10.10.0/24 | 数据网络 |
-| Site B (Palo Alto) | 10.20.20.0/24 | 数据网络 |
-
-### 1.4 隧道网络
-
-| 参数 | 值 |
-|------|----|
-| 隧道子网 | 169.255.1.0/30 |
-| Fortigate 隧道 IP | 169.255.1.1/30 |
-| Palo Alto 隧道 IP | 169.255.1.2/30 |
-
-### 1.5 Phase 1 参数（IKE）
-
-| 参数 | 值 | 说明 |
-|------|----|------|
-| IKE 版本 | IKEv2 | 推荐使用 IKEv2 |
-| 加密算法 | AES-256-CBC | 强加密 |
-| 认证算法 | SHA-256 | 安全哈希 |
-| DH 组 | Group 14 (2048-bit) | 安全的 Diffie-Hellman 组 |
-| 认证方式 | Pre-Shared Key (PSK) | 预共享密钥 |
-| PSK | `MySecurePSK!2024` | 示例密钥（实际部署应使用强密钥） |
-| 生命周期 | 86400 秒 (24小时) | Phase 1 SA 生命周期 |
-
-### 1.6 Phase 2 参数（IPSec）
-
-| 参数 | 值 | 说明 |
-|------|----|------|
-| 加密算法 | AES-256-CBC | ESP 加密 |
-| 认证算法 | SHA-256 | ESP 认证 |
-| DH 组 | Group 14 (2048-bit) | PFS（完美前向保密） |
-| 生命周期 | 3600 秒 (1小时) | Phase 2 SA 生命周期 |
-| 模式 | Tunnel Mode | 隧道模式 |
+> This document details the complete planning for automating IPSec VPN configuration between Fortigate and Palo Alto firewalls.
 
 ---
 
-## 2. 工具/API 识别
+## 1. Parameter Definitions
 
-### 2.1 Fortigate 可用工具
+### 1.1 Network Topology
 
-| 工具/API | 说明 | 适用场景 |
-|----------|------|----------|
-| **FortiOS REST API** | FortiOS 7.0+ 原生 REST API，支持通过 HTTPS 管理 VPN 配置 | 推荐：自动化首选方案 |
-| **FortiManager API** | 集中管理平台 API，适合大规模部署 | 大型企业多设备管理 |
-| **SSH + CLI** | 通过 SSH 连接执行 CLI 命令（使用 Netmiko/Paramiko） | 兼容旧版本或不支持 API 的设备 |
-| **Ansible** | 使用 `fortios` 模块集合 | 基础设施即代码 |
-| **Terraform** | FortiOS Provider | 基础设施即代码 |
+```
++-----------------+                        +-----------------+
+|   Site A        |                        |   Site B        |
+|  Fortigate      |     IPSec Tunnel       |  Palo Alto      |
+|  10.10.10.0/24  |<----------------------->|  10.20.20.0/24  |
+|  WAN: 200.1.1.1 |   169.255.1.0/30       |  WAN: 200.2.2.2 |
++-----------------+                        +-----------------+
+```
 
-**FortiOS REST API 示例端点：**
+### 1.2 WAN Interface Addresses
+
+| Device | WAN IP | Role |
+|--------|--------|------|
+| Fortigate (Site A) | 200.1.1.1/30 | VPN tunnel endpoint A |
+| Palo Alto (Site B) | 200.2.2.2/30 | VPN tunnel endpoint B |
+
+### 1.3 Local Networks
+
+| Site | Local Network | Description |
+|------|---------------|-------------|
+| Site A (Fortigate) | 10.10.10.0/24 | Data network |
+| Site B (Palo Alto) | 10.20.20.0/24 | Data network |
+
+### 1.4 Tunnel Network
+
+| Parameter | Value |
+|-----------|-------|
+| Tunnel subnet | 169.255.1.0/30 |
+| Fortigate tunnel IP | 169.255.1.1/30 |
+| Palo Alto tunnel IP | 169.255.1.2/30 |
+
+### 1.5 Phase 1 Parameters (IKE)
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| IKE version | IKEv2 | Recommended |
+| Encryption algorithm | AES-256-CBC | Strong encryption |
+| Authentication algorithm | SHA-256 | Secure hash |
+| DH group | Group 14 (2048-bit) | Secure Diffie-Hellman group |
+| Authentication method | Pre-Shared Key (PSK) | Pre-shared key |
+| PSK | `MySecurePSK!2024` | Example key (use a strong key in production) |
+| Lifetime | 86400 seconds (24 hours) | Phase 1 SA lifetime |
+
+### 1.6 Phase 2 Parameters (IPSec)
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| Encryption algorithm | AES-256-CBC | ESP encryption |
+| Authentication algorithm | SHA-256 | ESP authentication |
+| DH group | Group 14 (2048-bit) | PFS (Perfect Forward Secrecy) |
+| Lifetime | 3600 seconds (1 hour) | Phase 2 SA lifetime |
+| Mode | Tunnel Mode | Tunnel mode |
+
+---
+
+## 2. Tool/API Identification
+
+### 2.1 Fortigate Available Tools
+
+| Tool/API | Description | Use Case |
+|----------|-------------|----------|
+| **FortiOS REST API** | Native REST API in FortiOS 7.0+, manages VPN config via HTTPS | Recommended: primary automation method |
+| **FortiManager API** | Centralized management platform API | Large enterprise multi-device management |
+| **SSH + CLI** | Execute CLI commands via SSH (Netmiko/Paramiko) | Legacy devices or API not supported |
+| **Ansible** | Using `fortios` module collection | Infrastructure as Code |
+| **Terraform** | FortiOS Provider | Infrastructure as Code |
+
+**FortiOS REST API Example Endpoints:**
 ```
 POST https://<fortigate-ip>/api/v2/cmdb/vpn.ipsec/phase1-interface
 POST https://<fortigate-ip>/api/v2/cmdb/vpn.ipsec/phase2-interface
 POST https://<fortigate-ip>/api/v2/cmdb/firewall/policy
 ```
 
-### 2.2 Palo Alto 可用工具
+### 2.2 Palo Alto Available Tools
 
-| 工具/API | 说明 | 适用场景 |
-|----------|------|----------|
-| **Palo Alto XML API** | 原生 XML API，支持所有配置操作 | 推荐：自动化首选方案 |
-| **Panorama API** | 集中管理平台 API | 大规模部署 |
-| **SSH + CLI** | 通过 SSH 连接执行 CLI 命令 | 兼容旧版本 |
-| **Ansible** | 使用 `paloaltonetworks.panos` 模块集合 | 基础设施即代码 |
-| **Terraform** | PAN-OS Provider | 基础设施即代码 |
+| Tool/API | Description | Use Case |
+|----------|-------------|----------|
+| **Palo Alto XML API** | Native XML API, supports all configuration operations | Recommended: primary automation method |
+| **Panorama API** | Centralized management platform API | Large-scale deployment |
+| **SSH + CLI** | Execute CLI commands via SSH | Legacy devices |
+| **Ansible** | Using `paloaltonetworks.panos` module collection | Infrastructure as Code |
+| **Terraform** | PAN-OS Provider | Infrastructure as Code |
 
-**Palo Alto XML API 示例：**
+**Palo Alto XML API Example:**
 ```
 https://<paloalto-ip>/api/?type=config&action=set&xpath=/config/devices/entry[@name='localhost.localdomain']/network/ike/gateway/entry[@name='VPN-GW']&element=<...>&key=<api-key>
 ```
 
-### 2.3 推荐方案
+### 2.3 Recommended Approach
 
-**推荐使用 REST/XML API + SSH 回退的混合方案：**
+**Hybrid approach using REST/XML API with SSH fallback:**
 
-1. **主方案**：通过 API 进行配置（FortiOS REST API + Palo Alto XML API）
-2. **回退方案**：API 不可用时通过 SSH + CLI 执行配置
-3. **验证**：两种方式都使用 SSH 执行验证命令
+1. **Primary**: Configure via API (FortiOS REST API + Palo Alto XML API)
+2. **Fallback**: Use SSH + CLI when API is unavailable
+3. **Validation**: Use SSH to execute verification commands in both cases
 
-理由：
-- API 方式更稳定、更安全（无需明文传输 CLI 命令）
-- SSH 方式兼容性更好，适合旧版本设备
-- 混合方案保证了灵活性和可靠性
+Rationale:
+- API is more stable and secure (no plaintext CLI commands)
+- SSH offers better compatibility for legacy devices
+- Hybrid approach ensures flexibility and reliability
 
 ---
 
-## 3. 自动化步骤
+## 3. Automation Steps
 
-### 3.1 前置准备
-
-```
-┌─────────────────────────────────┐
-│ 1. 收集参数（IP、PSK、网络等）    │
-│ 2. 验证设备可达性（ping/SSH）     │
-│ 3. 获取 API Token / SSH 凭据     │
-└──────────────┬──────────────────┘
-               │
-               ▼
-```
-
-### 3.2 Fortigate 侧配置步骤
+### 3.1 Prerequisites
 
 ```
-┌──────────────────────────────────────────┐
-│ Step 1: 创建地址对象                       │
-│  - obj_local_net: 10.10.10.0/24          │
-│  - obj_remote_net: 10.20.20.0/24         │
-├──────────────────────────────────────────┤
-│ Step 2: 配置 Phase 1 (IKE Gateway)        │
-│  - 接口: wan1                             │
-│  - 对端IP: 200.2.2.2                     │
-│  - IKE版本: v2                            │
-│  - 加密/认证/DH: AES-256/SHA-256/G14     │
-│  - PSK认证                                │
-├──────────────────────────────────────────┤
-│ Step 3: 配置 Phase 2 (IPSec Proposal)     │
-│  - 加密/认证: AES-256/SHA-256            │
-│  - PFS: Group 14                         │
-│  - 生命周期: 3600s                        │
-│  - 源网络: 10.10.10.0/24                  │
-│  - 目标网络: 10.20.20.0/24                │
-├──────────────────────────────────────────┤
-│ Step 4: 配置防火墙策略                     │
-│  - 源: obj_local_net                      │
-│  - 目的: obj_remote_net                   │
-│  - 动作: ACCEPT                           │
-│  - 出接口: VPN隧道接口                     │
-├──────────────────────────────────────────┤
-│ Step 5: 配置隧道接口IP                     │
-│  - 接口: VPN-Tunnel                       │
-│  - IP: 169.255.1.1/30                     │
-├──────────────────────────────────────────┤
-│ Step 6: 配置静态路由                       │
-│  - 目标: 10.20.20.0/24                    │
-│  - 下一跳: VPN-Tunnel 接口                 │
-└──────────────────────────────────────────┘
++-----------------------------------+
+| 1. Gather parameters (IP, PSK,    |
+|    networks, etc.)                |
+| 2. Verify device reachability     |
+|    (ping/SSH)                      |
+| 3. Obtain API Token / SSH creds   |
++----------------+------------------+
+                 |
+                 v
 ```
 
-### 3.3 Palo Alto 侧配置步骤
+### 3.2 Fortigate Configuration Steps
 
 ```
-┌──────────────────────────────────────────┐
-│ Step 1: 创建地址对象                       │
-│  - obj_local_net: 10.20.20.0/24          │
-│  - obj_remote_net: 10.10.10.0/24         │
-├──────────────────────────────────────────┤
-│ Step 2: 配置 IKE Crypto Profile           │
-│  - 加密: AES-256                          │
-│  - 认证: SHA-256                          │
-│  - DH: Group 14                           │
-│  - 生命周期: 86400s                        │
-├──────────────────────────────────────────┤
-│ Step 3: 配置 IKE Gateway                  │
-│  - 对端IP: 200.1.1.1                     │
-│  - 认证: PSK                              │
-│  - IKE版本: IKEv2                         │
-│  - 本地接口: ethernet1/1                  │
-├──────────────────────────────────────────┤
-│ Step 4: 配置 IPSec Crypto Profile         │
-│  - 加密: AES-256                          │
-│  - 认证: SHA-256                          │
-│  - DH: Group 14 (PFS)                    │
-│  - 生命周期: 3600s                        │
-├──────────────────────────────────────────┤
-│ Step 5: 配置 IPSec Tunnel                 │
-│  - IKE Gateway: VPN-GW                   │
-│  - IPSec Crypto Profile: VPN-Crypto      │
-│  - 隧道接口: tunnel.1                     │
-├──────────────────────────────────────────┤
-│ Step 6: 配置隧道接口                       │
-│  - 接口: tunnel.1                         │
-│  - IP: 169.255.1.2/30                     │
-│  - Virtual Router: default               │
-│  - Security Zone: VPN-Zone               │
-├──────────────────────────────────────────┤
-│ Step 7: 配置静态路由                       │
-│  - 目标: 10.10.10.0/24                    │
-│  - 下一跳: tunnel.1                       │
-├──────────────────────────────────────────┤
-│ Step 8: 配置安全策略                       │
-│  - 源Zone: VPN-Zone / 目的Zone: trust     │
-│  - 源地址: obj_remote_net                 │
-│  - 目的地址: obj_local_net                │
-│  - 动作: allow                            │
-│  (反向策略同理)                            │
-├──────────────────────────────────────────┤
-│ Step 9: Commit 配置                       │
-│  - 提交所有变更到设备                      │
-└──────────────────────────────────────────┘
++------------------------------------------+
+| Step 1: Create Address Objects           |
+|  - obj_local_net: 10.10.10.0/24          |
+|  - obj_remote_net: 10.20.20.0/24         |
++------------------------------------------+
+| Step 2: Configure Phase 1 (IKE Gateway)  |
+|  - Interface: wan1                        |
+|  - Peer IP: 200.2.2.2                    |
+|  - IKE version: v2                       |
+|  - Enc/Auth/DH: AES-256/SHA-256/G14     |
+|  - PSK authentication                     |
++------------------------------------------+
+| Step 3: Configure Phase 2 (IPSec Prop.)   |
+|  - Enc/Auth: AES-256/SHA-256            |
+|  - PFS: Group 14                         |
+|  - Lifetime: 3600s                       |
+|  - Source: 10.10.10.0/24                 |
+|  - Destination: 10.20.20.0/24           |
++------------------------------------------+
+| Step 4: Configure Firewall Policy        |
+|  - Source: obj_local_net                 |
+|  - Destination: obj_remote_net          |
+|  - Action: ACCEPT                        |
+|  - Outbound interface: VPN tunnel        |
++------------------------------------------+
+| Step 5: Configure Tunnel Interface IP    |
+|  - Interface: VPN-Tunnel                 |
+|  - IP: 169.255.1.1/30                    |
++------------------------------------------+
+| Step 6: Configure Static Route           |
+|  - Destination: 10.20.20.0/24            |
+|  - Next hop: VPN-Tunnel interface        |
++------------------------------------------+
 ```
 
-### 3.4 自动化脚本流程图
+### 3.3 Palo Alto Configuration Steps
+
+```
++------------------------------------------+
+| Step 1: Create Address Objects           |
+|  - obj_local_net: 10.20.20.0/24          |
+|  - obj_remote_net: 10.10.10.0/24         |
++------------------------------------------+
+| Step 2: Configure IKE Crypto Profile     |
+|  - Encryption: AES-256                   |
+|  - Authentication: SHA-256               |
+|  - DH: Group 14                          |
+|  - Lifetime: 86400s                      |
++------------------------------------------+
+| Step 3: Configure IKE Gateway            |
+|  - Peer IP: 200.1.1.1                    |
+|  - Authentication: PSK                   |
+|  - IKE version: IKEv2                    |
+|  - Local interface: ethernet1/1          |
++------------------------------------------+
+| Step 4: Configure IPSec Crypto Profile    |
+|  - Encryption: AES-256                   |
+|  - Authentication: SHA-256               |
+|  - DH: Group 14 (PFS)                   |
+|  - Lifetime: 3600s                       |
++------------------------------------------+
+| Step 5: Configure IPSec Tunnel           |
+|  - IKE Gateway: VPN-GW                   |
+|  - IPSec Crypto Profile: VPN-Crypto      |
+|  - Tunnel interface: tunnel.1            |
++------------------------------------------+
+| Step 6: Configure Tunnel Interface       |
+|  - Interface: tunnel.1                   |
+|  - IP: 169.255.1.2/30                    |
+|  - Virtual Router: default               |
+|  - Security Zone: VPN-Zone               |
++------------------------------------------+
+| Step 7: Configure Static Route           |
+|  - Destination: 10.10.10.0/24            |
+|  - Next hop: tunnel.1                    |
++------------------------------------------+
+| Step 8: Configure Security Policy        |
+|  - Source Zone: VPN-Zone / Dest Zone: trust |
+|  - Source address: obj_remote_net        |
+|  - Destination address: obj_local_net    |
+|  - Action: allow                         |
+|  (Reverse policy similarly)              |
++------------------------------------------+
+| Step 9: Commit Configuration             |
+|  - Commit all changes to the device      |
++------------------------------------------+
+```
+
+### 3.4 Automation Script Flow
 
 ```
 START
-  │
-  ├──► 读取配置参数文件 (JSON/YAML)
-  │
-  ├──► Fortigate 配置模块
-  │      ├── 登录获取 API Token
-  │      ├── 创建地址对象
-  │      ├── 配置 Phase 1 (IKE Gateway)
-  │      ├── 配置 Phase 2 (IPSec Proposal)
-  │      ├── 配置防火墙策略
-  │      ├── 配置隧道接口IP
-  │      ├── 配置静态路由
-  │      └── 验证配置
-  │
-  ├──► Palo Alto 配置模块
-  │      ├── 获取 API Key
-  │      ├── 创建地址对象
-  │      ├── 配置 IKE Crypto Profile
-  │      ├── 配置 IKE Gateway
-  │      ├── 配置 IPSec Crypto Profile
-  │      ├── 配置 IPSec Tunnel
-  │      ├── 配置隧道接口
-  │      ├── 配置静态路由
-  │      ├── 配置安全策略
-  │      ├── Commit
-  │      └── 验证配置
-  │
-  ├──► 全局验证
-  │      ├── 检查隧道状态 (两端)
-  │      ├── 测试连通性 (ping)
-  │      └── 生成告警报告
-  │
+  |
+  +--> Read configuration parameters (JSON/YAML)
+  |
+  +--> Fortigate Configuration Module
+  |      +-- Login to obtain API Token
+  |      +-- Create address objects
+  |      +-- Configure Phase 1 (IKE Gateway)
+  |      +-- Configure Phase 2 (IPSec Proposal)
+  |      +-- Configure firewall policy
+  |      +-- Configure tunnel interface IP
+  |      +-- Configure static route
+  |      +-- Validate configuration
+  |
+  +--> Palo Alto Configuration Module
+  |      +-- Obtain API Key
+  |      +-- Create address objects
+  |      +-- Configure IKE Crypto Profile
+  |      +-- Configure IKE Gateway
+  |      +-- Configure IPSec Crypto Profile
+  |      +-- Configure IPSec Tunnel
+  |      +-- Configure tunnel interface
+  |      +-- Configure static route
+  |      +-- Configure security policy
+  |      +-- Commit
+  |      +-- Validate configuration
+  |
+  +--> Global Validation
+  |      +-- Check tunnel status (both sides)
+  |      +-- Test connectivity (ping)
+  |      +-- Generate alert report
+  |
 END
 ```
 
 ---
 
-## 4. 跨厂商自动化注意事项
+## 4. Cross-Vendor Automation Considerations
 
-### 4.1 术语映射差异
+### 4.1 Terminology Mapping
 
-| 概念 | Fortigate 术语 | Palo Alto 术语 |
-|------|---------------|----------------|
+| Concept | Fortigate Term | Palo Alto Term |
+|---------|---------------|----------------|
 | IKE Phase 1 | Phase 1 Interface | IKE Gateway + IKE Crypto Profile |
 | IKE Phase 2 | Phase 2 Interface | IPSec Tunnel + IPSec Crypto Profile |
-| 防火墙策略 | Firewall Policy | Security Policy |
-| 地址对象 | Address | Address Object |
-| 接口绑定 | 绑定到 VPN 接口 | 绑定到 Tunnel 接口 |
-| 提交配置 | 自动生效 | 需要 Commit 操作 |
-| 接口类型 | VPN 接口 | Tunnel 接口 (tunnel.X) |
+| Firewall policy | Firewall Policy | Security Policy |
+| Address object | Address | Address Object |
+| Interface binding | Bound to VPN interface | Bound to Tunnel interface |
+| Commit config | Takes effect immediately | Requires Commit operation |
+| Interface type | VPN interface | Tunnel interface (tunnel.X) |
 
-### 4.2 关键挑战
+### 4.2 Key Challenges
 
-1. **配置提交机制差异**：
-   - Fortigate: API 调用后立即生效，无需额外提交
-   - Palo Alto: 需要 `commit` 操作才能使配置生效
-   - 解决方案：在 Palo Alto 侧自动化流程最后增加 commit 步骤
+1. **Configuration Commit Mechanism Differences**:
+   - Fortigate: API calls take effect immediately, no additional commit needed
+   - Palo Alto: Requires `commit` operation to apply configuration
+   - Solution: Add a commit step at the end of the Palo Alto automation workflow
 
-2. **API 格式差异**：
-   - Fortigate: REST API，JSON 格式
-   - Palo Alto: XML API，XML 格式
-   - 解决方案：为每个厂商实现独立的 API 客户端模块
+2. **API Format Differences**:
+   - Fortigate: REST API, JSON format
+   - Palo Alto: XML API, XML format
+   - Solution: Implement separate API client modules for each vendor
 
-3. **隧道接口编号差异**：
-   - Fortigate: 使用命名接口（如 "VPN-Tunnel"）
-   - Palo Alto: 使用编号隧道接口（如 tunnel.1）
-   - 解决方案：参数化接口命名，在配置模板中处理
+3. **Tunnel Interface Numbering Differences**:
+   - Fortigate: Uses named interfaces (e.g., "VPN-Tunnel")
+   - Palo Alto: Uses numbered tunnel interfaces (e.g., tunnel.1)
+   - Solution: Parameterize interface naming in configuration templates
 
-4. **Phase 1/Phase 2 配置粒度差异**：
-   - Fortigate: Phase 1 和 Phase 2 在单个接口配置中关联
-   - Palo Alto: 需要分别创建 Crypto Profile、Gateway 和 Tunnel 对象
-   - 解决方案：在自动化脚本中按厂商分别处理配置顺序
+4. **Phase 1/Phase 2 Configuration Granularity Differences**:
+   - Fortigate: Phase 1 and Phase 2 are associated in a single interface configuration
+   - Palo Alto: Requires separate Crypto Profile, Gateway, and Tunnel objects
+   - Solution: Handle configuration order separately per vendor in automation scripts
 
-5. **IKE 提议顺序**：
-   - 不同厂商的 IKE 提议匹配顺序可能不同
-   - 需确保双方配置的加密参数完全一致
-   - 解决方案：使用标准化参数配置模板，避免使用默认值
+5. **IKE Proposal Order**:
+   - Different vendors may have different IKE proposal matching orders
+   - Must ensure both sides have identical encryption parameters
+   - Solution: Use standardized parameter configuration templates, avoid defaults
 
-6. **NAT 穿透**：
-   - 双方都需要启用 NAT-T
-   - Fortigate: 默认启用
-   - Palo Alto: 需要在 IKE Gateway 中启用
-   - 解决方案：显式配置 NAT-T
+6. **NAT Traversal**:
+   - Both sides must enable NAT-T
+   - Fortigate: Enabled by default
+   - Palo Alto: Must be enabled in IKE Gateway
+   - Solution: Explicitly configure NAT-T
 
-### 4.3 安全注意事项
+### 4.3 Security Considerations
 
-- PSK 不应硬编码在脚本中，应从环境变量或密钥管理服务读取
-- API Token/Key 应定期轮换
-- SSH 连接应使用密钥认证而非密码
-- 所有自动化操作应记录审计日志
-- 配置变更前应自动备份当前配置
+- PSK should not be hardcoded in scripts; read from environment variables or a secret management service
+- API Token/Key should be rotated periodically
+- SSH connections should use key-based authentication instead of passwords
+- All automation operations should be recorded in audit logs
+- Back up current configuration automatically before any configuration changes
 
 ---
 
-## 5. 配置验证和告警策略
+## 5. Configuration Validation and Alert Strategy
 
-### 5.1 验证方法
+### 5.1 Validation Methods
 
-#### Fortigate 验证命令
+#### Fortigate Validation Commands
 
 ```bash
-# 检查 IKE Phase 1 状态
+# Check IKE Phase 1 status
 diagnose vpn ike gateway list
 
-# 检查 IPSec Phase 2 状态
+# Check IPSec Phase 2 status
 diagnose vpn tunnel list
 
-# 检查隧道接口
+# Check tunnel interface
 diagnose vpn tunnel stats
 
-# 检查路由
+# Check routes
 diagnose ip route list
 
-# Ping 测试
+# Ping test
 execute ping 169.255.1.2
 execute ping source 10.10.10.1 10.20.20.1
 ```
 
-#### Palo Alto 验证命令
+#### Palo Alto Validation Commands
 
 ```bash
-# 检查 IKE Phase 1 状态
+# Check IKE Phase 1 status
 show vpn ike-sa
 
-# 检查 IPSec Phase 2 状态
+# Check IPSec Phase 2 status
 show vpn ipsec-sa
 
-# 检查隧道接口
+# Check tunnel interface
 show interface tunnel.1
 
-# 检查路由
+# Check routes
 show routing route
 
-# Ping 测试
+# Ping test
 ping source 10.20.20.1 host 10.10.10.1
 ```
 
-### 5.2 API 验证
+### 5.2 API Validation
 
-#### Fortigate REST API 验证
+#### Fortigate REST API Validation
 ```http
 GET https://<fortigate-ip>/api/v2/monitor/vpn/ipsec
 GET https://<fortigate-ip>/api/v2/monitor/vpn/ssl
 ```
 
-#### Palo Alto XML API 验证
+#### Palo Alto XML API Validation
 ```http
 https://<paloalto-ip>/api/?type=op&cmd=<show><vpn><ike-sa></ike-sa></vpn></show>&key=<api-key>
 https://<paloalto-ip>/api/?type=op&cmd=<show><vpn><ipsec-sa></ipsec-sa></vpn></show>&key=<api-key>
 ```
 
-### 5.3 验证检查清单
+### 5.3 Validation Checklist
 
-| 检查项 | 方法 | 期望结果 | 告警级别 |
-|--------|------|----------|----------|
-| Phase 1 SA 建立 | API/CLI 查询 | 状态为 established/up | 严重 |
-| Phase 2 SA 建立 | API/CLI 查询 | 状态为 up | 严重 |
-| 隧道接口UP | CLI 查询 | 接口状态为 up | 严重 |
-| 隧道IP连通性 | Ping 隧道IP | 100% 成功率 | 严重 |
-| 本地网络连通性 | Ping 对端本地IP | 100% 成功率 | 严重 |
-| 路由表正确 | CLI 查询路由 | 目标网络通过隧道接口可达 | 警告 |
-| 防火墙策略正确 | API/CLI 查询 | 允许双向流量 | 警告 |
-| 配置参数匹配 | 对比双方配置 | Phase 1/2 参数一致 | 严重 |
-| 无多余配置 | 对比期望配置 | 无非标准配置 | 信息 |
+| Check Item | Method | Expected Result | Alert Level |
+|------------|--------|-----------------|-------------|
+| Phase 1 SA established | API/CLI query | Status: established/up | Critical |
+| Phase 2 SA established | API/CLI query | Status: up | Critical |
+| Tunnel interface UP | CLI query | Interface status: up | Critical |
+| Tunnel IP connectivity | Ping tunnel IP | 100% success rate | Critical |
+| Local network connectivity | Ping remote local IP | 100% success rate | Critical |
+| Route table correct | CLI route query | Target network reachable via tunnel | Warning |
+| Firewall policy correct | API/CLI query | Bidirectional traffic allowed | Warning |
+| Config parameters match | Compare both sides | Phase 1/2 parameters identical | Critical |
+| No extra configuration | Compare to expected | No non-standard config | Info |
 
-### 5.4 告警机制
+### 5.4 Alert Mechanism
 
 ```
-验证流程:
-┌──────────────┐     ┌──────────────────┐     ┌───────────────┐
-│ 执行验证命令  │────►│ 对比期望状态      │────►│ 生成告警报告   │
-│ (API/CLI)    │    │ (参数/状态匹配)   │     │ (分级告警)     │
-└──────────────┘     └──────────────────┘     └───────┬───────┘
-                                                      │
-                                    ┌─────────────────┼─────────────────┐
-                                    │                 │                 │
-                                    ▼                 ▼                 ▼
-                              ┌──────────┐     ┌──────────┐     ┌──────────┐
-                              │ 严重告警  │     │ 警告告警  │     │ 信息通知  │
-                              │ (邮件+   │     │ (邮件    │     │ (日志    │
-                              │  日志)   │     │  通知)   │     │  记录)   │
-                              └──────────┘     └──────────┘     └──────────┘
+Validation Flow:
++--------------+     +------------------+     +---------------+
+| Execute      |---->| Compare to        |---->| Generate      |
+| validation   |     | expected state   |     | alert report  |
+| (API/CLI)    |     | (param/status)   |     | (graded)      |
++--------------+     +------------------+     +-------+-------+
+                                                       |
+                                     +-----------------+-----------------+
+                                     |                 |                 |
+                                     v                 v                 v
+                               +----------+    +----------+    +----------+
+                               | Critical |    | Warning  |    | Info     |
+                               | (email + |    | (email   |    | (log     |
+                               |  log)    |    |  notify) |    |  only)   |
+                               +----------+    +----------+    +----------+
 ```
 
-**告警级别定义：**
+**Alert Level Definitions:**
 
-- **严重 (Critical)**: VPN 隧道无法建立、Phase 1/2 SA 失败、连通性测试失败
-  - 触发动作：发送告警邮件 + 写入错误日志 + 脚本退出码 1
-- **警告 (Warning)**: 路由缺失、策略不完整、参数轻微偏差
-  - 触发动作：发送通知邮件 + 写入警告日志
-- **信息 (Info)**: 发现非标准配置、额外对象存在
-  - 触发动作：仅写入信息日志
+- **Critical**: VPN tunnel cannot be established, Phase 1/2 SA failed, connectivity test failed
+  - Trigger: Send alert email + write error log + script exit code 1
+- **Warning**: Missing routes, incomplete policy, minor parameter discrepancies
+  - Trigger: Send notification email + write warning log
+- **Info**: Non-standard configuration found, extra objects present
+  - Trigger: Write info log only
 
-### 5.5 回退策略
+### 5.5 Rollback Strategy
 
-如果自动化配置后验证失败：
+If validation fails after automated configuration:
 
-1. **自动回退**：脚本从备份恢复配置
-2. **手动回退**：发送告警邮件，附带手动回退步骤
-3. **保留备份**：每次配置变更前自动备份当前配置
+1. **Automatic Rollback**: Script restores configuration from backup
+2. **Manual Rollback**: Send alert email with manual rollback steps
+3. **Backup Retention**: Automatically back up current configuration before each change
 
 ---
 
-## 6. 附录
+## 6. Appendix
 
-### 6.1 配置参数模板 (JSON)
+### 6.1 Configuration Parameter Template (JSON)
 
 ```json
 {
@@ -488,12 +491,12 @@ https://<paloalto-ip>/api/?type=op&cmd=<show><vpn><ipsec-sa></ipsec-sa></vpn></s
 }
 ```
 
-### 6.2 示例 CLI 配置命令
+### 6.2 Example CLI Configuration Commands
 
-#### Fortigate CLI 配置
+#### Fortigate CLI Configuration
 
 ```
-# 地址对象
+# Address objects
 config firewall address
     edit "obj_local_net"
         set subnet 10.10.10.0 255.255.255.0
@@ -526,14 +529,14 @@ config vpn ipsec phase2-interface
     next
 end
 
-# 隧道接口IP
+# Tunnel interface IP
 config system interface
     edit "VPN-to-PA"
         set ip 169.255.1.1 255.255.255.252
     next
 end
 
-# 防火墙策略
+# Firewall policy
 config firewall policy
     edit 1
         set srcintf "VPN-to-PA"
@@ -555,7 +558,7 @@ config firewall policy
     next
 end
 
-# 静态路由
+# Static route
 config router static
     edit 1
         set dst 10.20.20.0 255.255.255.0
@@ -564,10 +567,10 @@ config router static
 end
 ```
 
-#### Palo Alto CLI 配置
+#### Palo Alto CLI Configuration
 
 ```
-# 地址对象
+# Address objects
 set network address obj_local_net ip-netmask 10.20.20.0/24
 set network address obj_remote_net ip-netmask 10.10.10.0/24
 
@@ -595,21 +598,21 @@ set network tunnel ipsec VPN-Tunnel auto-key ike-gateway VPN-GW
 set network tunnel ipsec VPN-Tunnel auto-key ipsec-crypto-profile VPN-IPSec-Crypto
 set network tunnel ipsec VPN-Tunnel tunnel-interface tunnel.1
 
-# 隧道接口
+# Tunnel interface
 set network interface tunnel tunnel.1 ip 169.255.1.2/30
 set network interface tunnel tunnel.1 virtual-router default
 
-# 安全区域
+# Security zone
 set zone VPN-Zone network layer3 tunnel.1
 
-# 静态路由
+# Static route
 set network virtual-router default routing-table ip static-route 10.10.10.0/24 destination 10.10.10.0/24
 set network virtual-router default routing-table ip static-route 10.10.10.0/24 interface tunnel.1
 
-# 安全策略
+# Security policy
 set rulebase security rules Allow-VPN-Inbound from VPN-Zone to trust source obj_remote_net destination obj_local_net action allow
 set rulebase security rules Allow-VPN-Outbound from trust to VPN-Zone source obj_local_net destination obj_remote_net action allow
 
-# 提交配置
+# Commit configuration
 commit
 ```

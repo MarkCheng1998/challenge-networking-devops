@@ -1,12 +1,12 @@
 """
-Palo Alto IPSec VPN 配置脚本
-=============================
-通过 Palo Alto XML API 配置 IPSec VPN 隧道。
+Palo Alto IPSec VPN Configuration Script
+=========================================
+Configures an IPSec VPN tunnel via the Palo Alto XML API.
 
-使用前需在 Palo Alto 上获取 API Key:
+Before use, obtain an API Key on the Palo Alto:
   curl -k "https://<paloalto-ip>/api/?type=keygen&user=<user>&password=<password>"
 
-依赖: pip install requests
+Dependencies: pip install requests
 """
 
 import requests
@@ -18,31 +18,31 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class PaloAltoVPNConfigurator:
-    """Palo Alto IPSec VPN 配置器，使用 XML API。"""
+    """Palo Alto IPSec VPN configurator using the XML API."""
 
     def __init__(self, host: str, api_key: str, verify_ssl: bool = False):
         """
         Args:
-            host: Palo Alto 管理IP
+            host: Palo Alto management IP
             api_key: Palo Alto API Key
-            verify_ssl: 是否验证SSL证书
+            verify_ssl: Whether to verify SSL certificates
         """
         self.base_url = f"https://{host}/api/"
         self.api_key = api_key
         self.verify_ssl = verify_ssl
 
     def _api_request(self, params: Dict[str, str]) -> ElementTree.Element:
-        """发送 XML API 请求。"""
+        """Send an XML API request."""
         params["key"] = self.api_key
         response = requests.get(self.base_url, params=params, verify=self.verify_ssl)
         root = ElementTree.fromstring(response.content)
         if root.attrib.get("status") != "success":
-            raise Exception(f"API请求失败: {ElementTree.tostring(root, encoding='unicode')}")
+            raise Exception(f"API request failed: {ElementTree.tostring(root, encoding='unicode')}")
         return root
 
     @staticmethod
     def get_api_key(host: str, username: str, password: str, verify_ssl: bool = False) -> str:
-        """通过用户名密码获取 API Key。"""
+        """Obtain an API Key using username and password."""
         response = requests.get(
             f"https://{host}/api/",
             params={"type": "keygen", "user": username, "password": password},
@@ -52,7 +52,7 @@ class PaloAltoVPNConfigurator:
         return root.find(".//key").text
 
     def set_config(self, xpath: str, element: str) -> ElementTree.Element:
-        """设置配置项。"""
+        """Set a configuration item."""
         return self._api_request({
             "type": "config",
             "action": "set",
@@ -61,7 +61,7 @@ class PaloAltoVPNConfigurator:
         })
 
     def create_address_object(self, name: str, ip_netmask: str) -> ElementTree.Element:
-        """创建地址对象。"""
+        """Create an address object."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/network/address/entry[@name='{name}']"
         element = f"<ip-netmask>{ip_netmask}</ip-netmask>"
         return self.set_config(xpath, element)
@@ -69,7 +69,7 @@ class PaloAltoVPNConfigurator:
     def configure_ike_crypto_profile(self, name: str, encryption: str,
                                       authentication: str, dh_group: str,
                                       lifetime_hours: int) -> ElementTree.Element:
-        """配置 IKE Crypto Profile。"""
+        """Configure an IKE Crypto Profile."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/network/ike/crypto-profiles/ike-crypto-profiles/entry[@name='{name}']"
         element = f"""<encryption><member>{encryption}</member></encryption>
 <hash><member>{authentication}</member></hash>
@@ -80,7 +80,7 @@ class PaloAltoVPNConfigurator:
     def configure_ike_gateway(self, name: str, peer_ip: str, local_interface: str,
                                psk: str, ike_crypto_profile: str,
                                ike_version: str = "ikev2") -> ElementTree.Element:
-        """配置 IKE Gateway。"""
+        """Configure an IKE Gateway."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/network/ike/gateway/entry[@name='{name}']"
         element = f"""<authentication><pre-shared-key><key>{psk}</key></pre-shared-key></authentication>
 <protocol><{ike_version}><ike-crypto-profile>{ike_crypto_profile}</ike-crypto-profile><dpd><enable>yes</enable></dpd></{ike_version}></protocol>
@@ -91,7 +91,7 @@ class PaloAltoVPNConfigurator:
     def configure_ipsec_crypto_profile(self, name: str, encryption: str,
                                         authentication: str, dh_group: str,
                                         lifetime_hours: int) -> ElementTree.Element:
-        """配置 IPSec Crypto Profile。"""
+        """Configure an IPSec Crypto Profile."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/network/ipsec-crypto-profiles/ipsec-crypto-profiles/entry[@name='{name}']"
         element = f"""<esp><encryption><member>{encryption}</member></encryption><authentication><member>{authentication}</member></authentication></esp>
 <dh-group>{dh_group}</dh-group>
@@ -101,26 +101,26 @@ class PaloAltoVPNConfigurator:
     def configure_ipsec_tunnel(self, name: str, ike_gateway: str,
                                 ipsec_crypto_profile: str,
                                 tunnel_interface: str) -> ElementTree.Element:
-        """配置 IPSec Tunnel。"""
+        """Configure an IPSec Tunnel."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/network/tunnel/ipsec/entry[@name='{name}']"
         element = f"""<auto-key><ike-gateway>{ike_gateway}</ike-gateway><ipsec-crypto-profile>{ipsec_crypto_profile}</ipsec-crypto-profile></auto-key>
 <tunnel-interface>{tunnel_interface}</tunnel-interface>"""
         return self.set_config(xpath, element)
 
     def configure_tunnel_interface(self, interface: str, ip: str) -> ElementTree.Element:
-        """配置隧道接口IP。"""
+        """Configure the tunnel interface IP."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/network/interface/tunnel/entry[@name='{interface}']"
         element = f"<ip>{ip}</ip>"
         return self.set_config(xpath, element)
 
     def configure_security_zone(self, zone_name: str, tunnel_interface: str) -> ElementTree.Element:
-        """配置安全区域。"""
+        """Configure a security zone."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/zone/entry[@name='{zone_name}']"
         element = f"<network><layer3><member>{tunnel_interface}</member></layer3></network>"
         return self.set_config(xpath, element)
 
     def configure_static_route(self, dst_network: str, tunnel_interface: str) -> ElementTree.Element:
-        """配置静态路由。"""
+        """Configure a static route."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/network/virtual-router/entry[@name='default']/routing-table/ip/static-route/entry[@name='route-{dst_network}']"
         element = f"""<destination>{dst_network}</destination>
 <interface>{tunnel_interface}</interface>"""
@@ -128,7 +128,7 @@ class PaloAltoVPNConfigurator:
 
     def configure_security_policy(self, rule_name: str, from_zone: str, to_zone: str,
                                    src_addr: str, dst_addr: str) -> ElementTree.Element:
-        """配置安全策略。"""
+        """Configure a security policy."""
         xpath = f"/config/devices/entry[@name='localhost.localdomain']/rulebase/security/rules/entry[@name='{rule_name}']"
         element = f"""<from><member>{from_zone}</member></from>
 <to><member>{to_zone}</member></to>
@@ -138,68 +138,68 @@ class PaloAltoVPNConfigurator:
         return self.set_config(xpath, element)
 
     def commit(self) -> ElementTree.Element:
-        """提交所有配置变更。"""
+        """Commit all configuration changes."""
         return self._api_request({"type": "commit", "cmd": "<commit></commit>"})
 
     def get_ike_sa_status(self) -> ElementTree.Element:
-        """获取 IKE SA 状态。"""
+        """Get IKE SA status."""
         return self._api_request({"type": "op", "cmd": "<show><vpn><ike-sa></ike-sa></vpn></show>"})
 
     def get_ipsec_sa_status(self) -> ElementTree.Element:
-        """获取 IPSec SA 状态。"""
+        """Get IPSec SA status."""
         return self._api_request({"type": "op", "cmd": "<show><vpn><ipsec-sa></ipsec-sa></vpn></show>"})
 
     def apply_full_config(self, params: Dict) -> Dict:
-        """执行完整VPN配置流程。"""
+        """Execute the full VPN configuration workflow."""
         results = {"steps": [], "success": True, "errors": []}
 
         steps = [
-            ("创建地址对象 - 本地网络", lambda: self.create_address_object(
+            ("Create address object - local network", lambda: self.create_address_object(
                 "obj_local_net", params["local_subnet"])),
-            ("创建地址对象 - 远程网络", lambda: self.create_address_object(
+            ("Create address object - remote network", lambda: self.create_address_object(
                 "obj_remote_net", params["remote_subnet"])),
-            ("配置 IKE Crypto Profile", lambda: self.configure_ike_crypto_profile(
+            ("Configure IKE Crypto Profile", lambda: self.configure_ike_crypto_profile(
                 params["ike_crypto_profile"], "aes-256-cbc", "sha256", "group14", 24)),
-            ("配置 IKE Gateway", lambda: self.configure_ike_gateway(
+            ("Configure IKE Gateway", lambda: self.configure_ike_gateway(
                 params["ike_gateway"], params["remote_peer"],
                 params["wan_interface"], params["psk"],
                 params["ike_crypto_profile"])),
-            ("配置 IPSec Crypto Profile", lambda: self.configure_ipsec_crypto_profile(
+            ("Configure IPSec Crypto Profile", lambda: self.configure_ipsec_crypto_profile(
                 params["ipsec_crypto_profile"], "aes-256-cbc", "sha256", "group14", 1)),
-            ("配置 IPSec Tunnel", lambda: self.configure_ipsec_tunnel(
+            ("Configure IPSec Tunnel", lambda: self.configure_ipsec_tunnel(
                 params["ipsec_tunnel"], params["ike_gateway"],
                 params["ipsec_crypto_profile"], params["tunnel_interface"])),
-            ("配置隧道接口", lambda: self.configure_tunnel_interface(
+            ("Configure tunnel interface", lambda: self.configure_tunnel_interface(
                 params["tunnel_interface"], params["tunnel_ip"])),
-            ("配置安全区域", lambda: self.configure_security_zone(
+            ("Configure security zone", lambda: self.configure_security_zone(
                 params["vpn_zone"], params["tunnel_interface"])),
-            ("配置静态路由", lambda: self.configure_static_route(
+            ("Configure static route", lambda: self.configure_static_route(
                 params["remote_subnet"], params["tunnel_interface"])),
-            ("配置安全策略 - 入站", lambda: self.configure_security_policy(
+            ("Configure security policy - inbound", lambda: self.configure_security_policy(
                 "Allow-VPN-Inbound", params["vpn_zone"], "trust",
                 "obj_remote_net", "obj_local_net")),
-            ("配置安全策略 - 出站", lambda: self.configure_security_policy(
+            ("Configure security policy - outbound", lambda: self.configure_security_policy(
                 "Allow-VPN-Outbound", "trust", params["vpn_zone"],
                 "obj_local_net", "obj_remote_net")),
-            ("提交配置 (Commit)", lambda: self.commit()),
+            ("Commit configuration", lambda: self.commit()),
         ]
 
         for step_name, step_func in steps:
             try:
                 result = step_func()
                 results["steps"].append({"step": step_name, "status": "success"})
-                print(f"[\u2713] {step_name}")
+                print(f"[OK] {step_name}")
             except Exception as e:
                 results["steps"].append({"step": step_name, "status": "failed", "error": str(e)})
                 results["errors"].append(f"{step_name}: {str(e)}")
                 results["success"] = False
-                print(f"[\u2717] {step_name}: {e}")
+                print(f"[FAIL] {step_name}: {e}")
 
         return results
 
 
 if __name__ == "__main__":
-    # 示例用法
+    # Example usage
     config = {
         "host": "192.168.1.100",
         "api_key": "YOUR_PALO_ALTO_API_KEY",
@@ -223,6 +223,6 @@ if __name__ == "__main__":
     )
 
     result = configurator.apply_full_config(config)
-    print(f"\n配置完成: {'成功' if result['success'] else '失败'}")
+    print(f"\nConfiguration complete: {'Success' if result['success'] else 'Failed'}")
     if result["errors"]:
-        print(f"错误: {result['errors']}")
+        print(f"Errors: {result['errors']}")
