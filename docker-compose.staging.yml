@@ -1,0 +1,35 @@
+# Staging docker-compose - mirrors production with test-friendly config
+version: "3.8"
+
+services:
+  app-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: "staging"
+    container_name: challenge-net-staging
+    ports:
+      - "5002:5000"
+    environment:
+      - APP_VERSION=staging
+      - FLASK_ENV=staging
+      - FEATURE_ENABLE_SIM_MODE_DEFAULT=true
+      - FEATURE_ENABLE_AUDIT_LOG=true
+      - FEATURE_MAINTENANCE_MODE=false
+    volumes:
+      - ./backups:/app/backups
+      - ./config/feature_flags.json:/app/config/feature_flags.json:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - staging-net
+
+networks:
+  staging-net:
+    driver: bridge

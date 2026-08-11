@@ -11,8 +11,18 @@ This project implements Cisco switch VLAN configuration automation (via a web fr
 ```
 challenge-networking-devops/
 ├── README.md                         # Project documentation
+├── CHANGELOG.md                      # Semantic versioning changelog
+├── VERSION                           # Current version (1.1.0)
+├── pyproject.toml                    # Python tooling config (pytest, flake8, black, bandit)
 ├── requirements.txt                  # Python dependencies
+├── Dockerfile                        # Multi-stage Docker build
+├── docker-compose.yml                # Production + canary deployment
+├── docker-compose.staging.yml        # Staging environment
 ├── .gitignore
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                    # CI: lint → test → security → build
+│       └── cd.yml                    # CD: staging deploy + canary release
 ├── app.py                            # Flask web application entry point
 ├── templates/
 │   └── index.html                    # VLAN configuration frontend interface
@@ -21,19 +31,29 @@ challenge-networking-devops/
 │   └── script.js                     # Frontend interaction logic
 ├── backend/
 │   ├── __init__.py
-│   └── switch_config.py              # Cisco switch automation backend (VLAN/hostname/save/backup/validation)
+│   ├── switch_config.py              # Cisco switch automation backend
+│   └── feature_flags.py              # Feature flag system for gray release
+├── config/
+│   └── feature_flags.json            # Canary release configuration
+├── nginx/
+│   └── nginx.conf                    # Load balancer for canary traffic routing
 ├── backups/                          # Configuration backup directory
+├── tests/
+│   ├── conftest.py                   # Pytest fixtures
+│   ├── test_switch_config.py         # Unit tests (SwitchConfigurator)
+│   └── test_app.py                   # Integration tests (Flask API)
 ├── docs/
-│   ├── vpn_ipsec_plan.md             # Part 2: IPSec VPN automation planning document
+│   ├── vpn_ipsec_plan.md             # Part 2: IPSec VPN automation planning
 │   ├── gns3_deployment_guide.md      # GNS3 step-by-step deployment guide
-│   └── gns3_topology.json            # GNS3 topology reference (nodes, links, VLANs)
+│   ├── gns3_topology.json            # GNS3 topology reference
+│   └── cicd_strategy.md              # CI/CD pipeline and canary release guide
 └── scripts/
     ├── fortigate_vpn_config.py       # Fortigate VPN configuration script (REST API)
     ├── paloalto_vpn_config.py        # Palo Alto VPN configuration script (XML API)
     ├── test_connectivity.py          # IPSec tunnel connectivity test script
-    ├── gns3_switch_init.py           # GNS3 switch initial configuration generator/applier
-    ├── gns3_demo.py                  # GNS3 demo runner (full VLAN automation workflow)
-    └── vpcs_config.sh                # VPCS host configuration script for GNS3 lab
+    ├── gns3_switch_init.py           # GNS3 switch initial configuration
+    ├── gns3_demo.py                  # GNS3 demo runner
+    └── vpcs_config.sh               # VPCS host configuration script
 ```
 
 ---
@@ -210,6 +230,111 @@ python app.py
 
 ---
 
+## CI/CD Pipeline & Gray Release
+
+This project includes a full CI/CD pipeline with gray/canary release support.
+
+### CI Pipeline (`.github/workflows/ci.yml`)
+
+Runs on every push and PR to `main`/`develop`:
+
+| Stage | Tool | Gate |
+|-------|------|------|
+| Lint | flake8 + black | Zero errors |
+| Test | pytest + pytest-cov | All tests pass, coverage ≥ 70% |
+| Security | bandit | No HIGH severity issues |
+| Build | Docker build + health check | Image builds, `/health` returns 200 |
+
+### CD Pipeline (`.github/workflows/cd.yml`)
+
+| Trigger | Action |
+|---------|--------|
+| Push to `main` | Build image → Deploy to staging → Smoke tests |
+| Tag `v*.*.*` | Build image → Canary (10%) → Health check → Promote to production |
+| Manual dispatch | Adjustable canary percentage |
+
+### Gray / Canary Release
+
+```
+           ┌──────────────────────────────────────┐
+           │     Nginx Load Balancer (:8080)      │
+           │   90% → app-blue   10% → app-canary  │
+           └────────┬────────────────┬────────────┘
+                    │                │
+           ┌────────▼────┐   ┌──────▼──────┐
+           │  app-blue   │   │ app-canary  │
+           │  :5000      │   │ :5001       │
+           │  v1.0.0     │   │ v1.1.0      │
+           │  (stable)   │   │ (canary)    │
+           └─────────────┘   └─────────────┘
+```
+
+```bash
+# Start canary deployment
+docker-compose --profile canary up -d
+
+# Check health
+curl http://localhost:5000/health    # production
+curl http://localhost:5001/health    # canary
+curl http://localhost:8080/health    # via load balancer
+
+# See which backend served your request
+curl -v http://localhost:8080/ 2>&1 | grep X-Served-By
+
+# Inspect feature flags
+curl http://localhost:5000/api/features | python -m json.tool
+
+# Rollback
+docker-compose down && docker-compose up -d  # restarts only blue
+```
+
+### Health Check Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/health` | Liveness probe (is the process alive?) |
+| `/ready` | Readiness probe (can the app serve traffic?) |
+| `/api/features` | Feature flag state (debug canary config) |
+
+### Running Tests Locally
+
+```bash
+# Install test dependencies
+pip install pytest pytest-cov flake8 black bandit
+
+# Run all tests with coverage
+pytest tests/ -v --cov=backend --cov=app --cov-report=term-missing
+
+# Run linter
+flake8 app.py backend/ tests/ --max-line-length=120 --extend-ignore=E501,W503,E203
+
+# Run security scan
+bandit -r backend/ scripts/ app.py -ll
+
+# Check formatting
+black --check --line-length 120 app.py backend/ tests/ scripts/
+```
+
+### Docker Deployment
+
+```bash
+# Build production image
+docker build -t challenge-networking:1.1.0 --build-arg APP_VERSION=1.1.0 .
+
+# Run standalone
+docker run -d -p 5000:5000 challenge-networking:1.1.0
+
+# Full stack with canary (production + canary + nginx)
+docker-compose --profile canary up -d
+
+# Staging
+docker-compose -f docker-compose.staging.yml up -d
+```
+
+Detailed CI/CD guide: [`docs/cicd_strategy.md`](docs/cicd_strategy.md)
+
+---
+
 ## Git Commit History
 
 This project uses Git for version control. Commit history:
@@ -225,6 +350,7 @@ This project uses Git for version control. Commit history:
 | 7 | Fix netmiko exception import for v4.7+ compatibility |
 | 8 | Rewrite all project documentation and code comments in English |
 | 9 | Add GNS3 deployment guide, topology reference, switch init script, demo runner, and VPCS config |
+| 10 | Add CI/CD pipeline: GitHub Actions (CI+CD), test suite (42 tests), Docker, canary release, feature flags, health checks, versioning |
 
 ---
 
@@ -235,3 +361,7 @@ This project uses Git for version control. Commit history:
 3. **Validation-Driven**: Automatic validation after configuration to ensure correctness
 4. **Secure Backup**: Automatic backup after each configuration change; filename includes hostname and timestamp
 5. **Cross-Vendor Compatibility**: VPN planning covers Fortigate and Palo Alto differences
+6. **CI/CD Pipeline**: GitHub Actions for lint, test, security, build, staging deploy, and canary release
+7. **Gray Release**: Feature flags + Nginx load balancer for safe canary deployments
+8. **Dockerized**: Multi-stage Docker build with health checks and non-root execution
+9. **Test Coverage**: 42 tests covering backend logic and Flask API endpoints (100% pass rate)

@@ -1,0 +1,28 @@
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--cov=backend",
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=70",
+]
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E501", "W503", "E203"]
+exclude = [".git", "__pycache__, build, dist, venv"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "backups"]
+skips = ["B101", "B403", "B601"]
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]

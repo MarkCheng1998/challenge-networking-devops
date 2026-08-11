@@ -1,0 +1,12 @@
+{
+  "canary_release": false,
+  "canary_percentage": 0,
+  "enable_validation_alerts": true,
+  "enable_backup_on_config": true,
+  "enable_sim_mode_default": false,
+  "max_vlans_per_request": 50,
+  "enable_ssh_timeout_override": false,
+  "ssh_timeout_seconds": 30,
+  "maintenance_mode": false,
+  "enable_audit_log": true
+}

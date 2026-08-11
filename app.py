@@ -8,11 +8,20 @@ validation results and alerts.
 """
 
 import os
+import time
+import platform
 from flask import Flask, render_template, request, jsonify
 from backend.switch_config import SwitchConfigurator, DEFAULT_VLANS, DEFAULT_HOSTNAME
+from backend.feature_flags import FeatureFlags
 
 app = Flask(__name__)
 app.config["JSON_AS_ASCII"] = False
+
+# Application start time for uptime tracking
+_APP_START_TIME = time.time()
+
+# Feature flags instance (supports gray/canary release)
+flags = FeatureFlags()
 
 
 @app.route("/")
@@ -106,6 +115,46 @@ def validate():
         configurator.disconnect()
 
     return jsonify(result)
+
+
+@app.route("/health")
+def health():
+    """
+    Liveness probe — returns 200 if the process is alive.
+    Used by CI/CD pipeline and container orchestrators.
+    """
+    return jsonify({
+        "status": "healthy",
+        "uptime_seconds": round(time.time() - _APP_START_TIME, 2),
+        "version": os.environ.get("APP_VERSION", "1.0.0"),
+    }), 200
+
+
+@app.route("/ready")
+def ready():
+    """
+    Readiness probe — returns 200 only when the app can serve traffic.
+    Checks: Flask is up, feature flags loaded, simulation backend available.
+    """
+    checks = {
+        "flask": True,
+        "feature_flags": flags.is_loaded(),
+        "simulation_backend": True,
+    }
+    all_ready = all(checks.values())
+    return jsonify({
+        "ready": all_ready,
+        "checks": checks,
+        "canary": flags.get("canary_release", False),
+        "canary_percentage": flags.get("canary_percentage", 0),
+        "python_version": platform.python_version(),
+    }), 200 if all_ready else 503
+
+
+@app.route("/api/features")
+def features():
+    """Return current feature flag state (for debugging gray release)."""
+    return jsonify(flags.dump())
 
 
 if __name__ == "__main__":

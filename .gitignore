@@ -28,3 +28,16 @@ Thumbs.db
 
 # Logs
 *.log
+
+# CI/CD artifacts
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+htmlcov/**
+reports/
+bandit-report.json
+*.egg-info/
+
+# Docker
+docker-compose.override.yml

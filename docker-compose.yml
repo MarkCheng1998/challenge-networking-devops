@@ -1,0 +1,79 @@
+version: "3.8"
+
+services:
+  # ─── Production Instance (Blue) ──────────────────────────────────
+  app-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: "1.0.0"
+    container_name: challenge-net-blue
+    ports:
+      - "5000:5000"
+    environment:
+      - APP_VERSION=1.0.0
+      - FEATURE_CANARY_RELEASE=false
+      - FEATURE_CANARY_PERCENTAGE=0
+    volumes:
+      - ./backups:/app/backups
+      - ./config/feature_flags.json:/app/config/feature_flags.json:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - challenge-net
+
+  # ─── Canary Instance (Green) ─────────────────────────────────────
+  # Only started during canary/gray release
+  app-canary:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: "1.1.0-canary"
+    container_name: challenge-net-canary
+    ports:
+      - "5001:5000"
+    environment:
+      - APP_VERSION=1.1.0-canary
+      - FEATURE_CANARY_RELEASE=true
+      - FEATURE_CANARY_PERCENTAGE=10
+    volumes:
+      - ./backups:/app/backups
+      - ./config/feature_flags.json:/app/config/feature_flags.json:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    profiles:
+      - canary
+    networks:
+      - challenge-net
+
+  # ─── Nginx Load Balancer (for canary routing) ────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: challenge-net-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app-blue
+    restart: unless-stopped
+    profiles:
+      - canary
+    networks:
+      - challenge-net
+
+networks:
+  challenge-net:
+    driver: bridge
