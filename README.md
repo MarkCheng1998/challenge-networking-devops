@@ -85,7 +85,7 @@ challenge-networking-devops/
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/challenge-networking-devops.git
+git clone https://github.com/MarkCheng1998/challenge-networking-devops.git
 cd challenge-networking-devops
 
 # Create a virtual environment (recommended)
